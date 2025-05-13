@@ -17,6 +17,10 @@ total_employees_input = st.text_input("Total Number of Employees (optional)", va
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
+    # Create User column from first and last name if they exist
+    if 'User First Name' in df.columns and 'User Last Name' in df.columns:
+        df['User'] = df['User First Name'] + ' ' + df['User Last Name']
+
     # Filter for valid entry events
     entry_df = df[(df['Event'] == 'Entry Unlock') & (df['Result'] == 'Granted') & (df['User'].notna())].copy()
 
