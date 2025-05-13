@@ -1,13 +1,32 @@
 import streamlit as st
 import pandas as pd
 import io
+import pandas as pd
+import csv
+
+def read_csv_auto_delimiter(file_path_or_buffer):
+    # Peek at a sample of the file to detect delimiter
+    if hasattr(file_path_or_buffer, 'read'):
+        sample = file_path_or_buffer.read(1024)
+        file_path_or_buffer.seek(0)
+    else:
+        with open(file_path_or_buffer, 'r') as f:
+            sample = f.read(1024)
+
+    dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';'])
+    return pd.read_csv(file_path_or_buffer, delimiter=dialect.delimiter)
+
+
 
 st.set_page_config(page_title="Office Attendance Analyzer", layout="wide")
 st.title("📊 Office Attendance Analyzer")
-
+selected_office = "Porto" if st.toggle("Switch to Porto", value=False) else "TLV"
 # Default values for excluded and low-requirement users
-default_excluded_users = "Yuval Shir, Ana Pereira, Jose Silva, Yivgeny Romanenko, Itamar Bul"
-default_low_req_users = "Silvia Johanna-Benquis-Hes, Oren Hadar, Dean Becker, Moshe Maizels"
+default_excluded_users = "Yuval Shir, Ana Pereira, Jose Silva, Yivgeny Romanenko, Itamar Bul" if selected_office == "TLV" else "Office Porto"
+default_low_req_users = "Silvia Johanna-Benquis-Hes, Oren Hadar, Dean Becker, Moshe Maizels" if selected_office == "TLV" else ""
+
+# Toggle for name selection
+
 
 uploaded_file = st.file_uploader("Upload the attendance CSV file", type="csv")
 exclude_users_input = st.text_area("Exclude Users (comma-separated)", value=default_excluded_users)
@@ -15,14 +34,20 @@ low_requirement_users_input = st.text_area("Users with Low Attendance Requiremen
 total_employees_input = st.text_input("Total Number of Employees (optional)", value="")
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-
+    if selected_office == "TLV":
+        df = pd.read_csv(uploaded_file, delimiter=',')
+    else:
+        df = pd.read_csv(uploaded_file, delimiter=';')
+    
     # Create User column from first and last name if they exist
     if 'User First Name' in df.columns and 'User Last Name' in df.columns:
         df['User'] = df['User First Name'] + ' ' + df['User Last Name']
 
     # Filter for valid entry events
-    entry_df = df[(df['Event'] == 'Entry Unlock') & (df['Result'] == 'Granted') & (df['User'].notna())].copy()
+    if "Event Category" in df.columns:
+        entry_df = df[(df['Event Category'] == 'lock_opened') & (df['User'].notna())].copy()
+    else:
+        entry_df = df[(df['Event'] == 'Entry Unlock') & (df['Result'] == 'Granted') & (df['User'].notna())].copy()
 
     # Handle excluded users
     exclude_users = [u.strip() for u in exclude_users_input.split(',') if u.strip()]
@@ -33,7 +58,10 @@ if uploaded_file:
     low_req_users = [u.strip() for u in low_requirement_users_input.split(',') if u.strip()]
 
     # Time conversion
-    entry_df['timestamp'] = pd.to_datetime(entry_df['Browser time'], errors='coerce')
+    if 'Local Time' in entry_df.columns:
+        entry_df['timestamp'] = pd.to_datetime(entry_df['Local Time'], errors='coerce')
+    else:
+        entry_df['timestamp'] = pd.to_datetime(entry_df['Browser time'], errors='coerce')
     entry_df['date'] = entry_df['timestamp'].dt.date
     entry_df['weekday'] = entry_df['timestamp'].dt.day_name()
     entry_df['month'] = entry_df['timestamp'].dt.to_period('M')
