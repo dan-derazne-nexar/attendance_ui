@@ -31,7 +31,7 @@ default_low_req_users = "Silvia Johanna-Benquis-Hes, Oren Hadar, Dean Becker, Mo
 uploaded_file = st.file_uploader("Upload the attendance CSV file", type="csv")
 exclude_users_input = st.text_area("Exclude Users (comma-separated)", value=default_excluded_users)
 low_requirement_users_input = st.text_area("Users with Low Attendance Requirement (comma-separated)", value=default_low_req_users)
-total_employees_input = st.text_input("Total Number of Employees (optional)", value="")
+total_employees_input = st.text_input("Total Number of Employees (optional)", value="36" if selected_office == "TLV" else "30")
 
 if uploaded_file:
     if selected_office == "TLV":
@@ -72,21 +72,25 @@ if uploaded_file:
 
     # Averages
     avg_daily = daily_counts['unique_user_count'].mean()
-    avg_mon_thu = daily_counts[daily_counts['weekday'].isin(['Monday', 'Thursday'])]['unique_user_count'].mean()
-    avg_sun_tue_wed = daily_counts[daily_counts['weekday'].isin(['Sunday', 'Tuesday', 'Wednesday'])]['unique_user_count'].mean()
+    mandatory_days = ['Monday', 'Thursday'] if selected_office == "TLV" else ['Tuesday', 'Thursday']
+    non_mandatory_days = ['Sunday', 'Tuesday', 'Wednesday'] if selected_office == "TLV" else ['Monday', 'Wednesday', 'Friday']
+    avg_mandatory = daily_counts[daily_counts['weekday'].isin(mandatory_days)]['unique_user_count'].mean()
+    avg_non_mandatory = daily_counts[daily_counts['weekday'].isin(non_mandatory_days)]['unique_user_count'].mean()
 
     # Attendance percentages
     try:
         total_employees = int(total_employees_input)
         percent_daily = (avg_daily / total_employees * 100)
-        percent_mon_thu = (avg_mon_thu / total_employees * 100)
+        percent_mandatory = (avg_mandatory / total_employees * 100)
+        percent_non_mandatory = (avg_non_mandatory / total_employees * 100)
     except:
         percent_daily = None
-        percent_mon_thu = None
+        percent_mandatory = None
+        percent_non_mandatory = None
 
-    # User breakdown for Mon/Thu (summed)
-    mon_thu_attendance = unique_daily[unique_daily['weekday'].isin(['Monday', 'Thursday'])]
-    mon_thu_summary = mon_thu_attendance.groupby('User').size().reset_index(name='Mon_Thu_Total')
+    # User breakdown for mandatory days (summed)
+    mandatory_attendance = unique_daily[unique_daily['weekday'].isin(mandatory_days)]
+    mandatory_summary = mandatory_attendance.groupby('User').size().reset_index(name='Mandatory_Days_Total')
 
     # Total attendance per user
     total_attendance = unique_daily.groupby('User').size().reset_index(name='Total_Attendance')
@@ -99,8 +103,8 @@ if uploaded_file:
         axis=1
     )
 
-    # Merge all summaries with total attendance placed between Mon_Thu and Compliant
-    final_summary = pd.merge(mon_thu_summary, total_attendance, on='User', how='left')
+    # Merge all summaries with total attendance placed between Mandatory_Days and Compliant
+    final_summary = pd.merge(mandatory_summary, total_attendance, on='User', how='left')
     final_summary = pd.merge(final_summary, compliance_summary[['User', 'Compliant']], on='User', how='left')
 
     # Compliance percentage
@@ -109,17 +113,18 @@ if uploaded_file:
     # Results Display
     st.subheader("📈 Summary Statistics")
     st.write(f"**Average Daily Attendance:** {avg_daily:.2f}")
-    st.write(f"**Average Monday & Thursday Attendance:** {avg_mon_thu:.2f}")
-    st.write(f"**Average Sun/Tue/Wed Attendance:** {avg_sun_tue_wed:.2f}")
-
-    if percent_daily is not None:
-        st.write(f"**% Daily Attendance:** {percent_daily:.1f}%")
-        st.write(f"**% Monday & Thursday Attendance:** {percent_mon_thu:.1f}%")
-
-    st.subheader("👤 Per-User Monday/Thursday Attendance, Total Attendance, and Compliance")
-    st.dataframe(final_summary)
-
+    st.write(f"**Average Mandatory Days Attendance ({', '.join(mandatory_days)}):** {avg_mandatory:.2f}")
+    st.write(f"**Average Non-Mandatory Days Attendance ({', '.join(non_mandatory_days)}):** {avg_non_mandatory:.2f}")
     if percent_compliant is not None:
         st.write(f"**% of Users Compliant:** {percent_compliant:.1f}%")
+    if percent_daily is not None:
+        st.write(f"**% Daily Attendance:** {percent_daily:.1f}%")
+        st.write(f"**% Mandatory Days Attendance:** {percent_mandatory:.1f}%")
+        st.write(f"**% Non-Mandatory Days Attendance:** {percent_non_mandatory:.1f}%")
+
+    st.subheader(f"👤 Per-User Mandatory Days ({', '.join(mandatory_days)}) Attendance, Total Attendance, and Compliance")
+    st.dataframe(final_summary)
+
+    
 else:
     st.info("Please upload a CSV file to begin analysis.")
